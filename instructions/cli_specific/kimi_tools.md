@@ -216,7 +216,7 @@ Created via CreateSubagent tool:
 |--------|--------------|-----------------|
 | Execution model | tmux panes (separate processes) | In-process (single Python process) |
 | Agent count | 10 (shogun + karo + 8 ashigaru) | Up to 100 (claimed) |
-| Communication | File-based inbox (YAML + inotifywait) | In-memory LaborMarket registry |
+| Communication | File-based inbox (YAML + fswatch) | In-memory LaborMarket registry |
 | Isolation | Full OS-level (separate tmux panes) | Python-level (separate KimiSoul instances) |
 | Recovery | /clear + CLAUDE.md auto-load | Checkpoint/DenwaRenji (time travel) |
 | CLI independence | Each agent runs own CLI instance | Single CLI, multiple internal agents |

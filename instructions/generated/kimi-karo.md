@@ -233,8 +233,8 @@ Delivery is handled by `inbox_watcher.sh` (infrastructure layer).
 
 Two layers:
 1. **Message persistence**: `inbox_write.sh` writes to `queue/inbox/{agent}.yaml` with flock. Guaranteed.
-2. **Wake-up signal**: `inbox_watcher.sh` detects file change via `inotifywait` → wakes agent:
-   - **優先度1**: Agent self-watch (agent's own `inotifywait` on its inbox) → no nudge needed
+2. **Wake-up signal**: `inbox_watcher.sh` detects file change via `fswatch` → wakes agent:
+   - **優先度1**: Agent self-watch (agent's own `fswatch` on its inbox) → no nudge needed
    - **優先度2**: `tmux send-keys` — short nudge only (text and Enter sent separately, 0.3s gap)
 
 The nudge is minimal: `inboxN` (e.g. `inbox3` = 3 unread). That's it.
@@ -671,7 +671,7 @@ Created via CreateSubagent tool:
 |--------|--------------|-----------------|
 | Execution model | tmux panes (separate processes) | In-process (single Python process) |
 | Agent count | 10 (shogun + karo + 8 ashigaru) | Up to 100 (claimed) |
-| Communication | File-based inbox (YAML + inotifywait) | In-memory LaborMarket registry |
+| Communication | File-based inbox (YAML + fswatch) | In-memory LaborMarket registry |
 | Isolation | Full OS-level (separate tmux panes) | Python-level (separate KimiSoul instances) |
 | Recovery | /clear + CLAUDE.md auto-load | Checkpoint/DenwaRenji (time travel) |
 | CLI independence | Each agent runs own CLI instance | Single CLI, multiple internal agents |

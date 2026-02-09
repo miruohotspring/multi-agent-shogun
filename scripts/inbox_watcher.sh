@@ -10,8 +10,8 @@
 #   エージェントが自分でinboxをReadして処理する
 #   冪等: 2回届いてもunreadがなければ何もしない
 #
-# inotifywait でファイル変更を検知（イベント駆動、ポーリングではない）
-# Fallback 1: 30秒タイムアウト（WSL2 inotify不発時の安全網）
+# fswatch でファイル変更を検知（イベント駆動、ポーリングではない）
+# Fallback 1: 30秒タイムアウト（fswatchのイベント欠落時の安全網）
 # Fallback 2: rc=1処理（Claude Code atomic write = tmp+rename でinode変更時）
 #
 # エスカレーション（未読メッセージが放置されている場合）:
@@ -22,7 +22,7 @@
 
 # ─── Testing guard ───
 # When __INBOX_WATCHER_TESTING__=1, only function definitions are loaded.
-# Argument parsing, inotifywait check, and main loop are skipped.
+# Argument parsing, fswatch check, and main loop are skipped.
 # Test code sets variables (AGENT_ID, PANE_TARGET, CLI_TYPE, INBOX) externally.
 if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
     set -euo pipefail
@@ -48,9 +48,9 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
 
     echo "[$(date)] inbox_watcher started — agent: $AGENT_ID, pane: $PANE_TARGET, cli: $CLI_TYPE" >&2
 
-    # Ensure inotifywait is available
-    if ! command -v inotifywait &>/dev/null; then
-        echo "[inbox_watcher] ERROR: inotifywait not found. Install: sudo apt install inotify-tools" >&2
+    # Ensure fswatch is available
+    if ! command -v fswatch &>/dev/null; then
+        echo "[inbox_watcher] ERROR: fswatch not found. Install: brew install fswatch (mac) or sudo apt-get install fswatch (linux)" >&2
         exit 1
     fi
 fi
@@ -160,10 +160,10 @@ send_cli_command() {
 }
 
 # ─── Agent self-watch detection ───
-# Check if the agent has an active inotifywait on its inbox.
+# Check if the agent has an active fswatch on its inbox.
 # If yes, the agent will self-wake — no nudge needed.
 agent_has_self_watch() {
-    pgrep -f "inotifywait.*inbox/${AGENT_ID}.yaml" >/dev/null 2>&1
+    pgrep -f "fswatch.*inbox/${AGENT_ID}.yaml" >/dev/null 2>&1
 }
 
 # ─── Agent busy detection ───
@@ -183,7 +183,7 @@ agent_is_busy() {
 
 # ─── Send wake-up nudge ───
 # Layered approach:
-#   1. If agent has active inotifywait self-watch → skip (agent wakes itself)
+#   1. If agent has active fswatch self-watch → skip (agent wakes itself)
 #   2. If agent is busy (Working) → skip (nudge during Working loses Enter)
 #   3. tmux send-keys (短いnudgeのみ、timeout 5s)
 send_wakeup() {
@@ -329,25 +329,52 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
 # ─── Startup: process any existing unread messages ───
 process_unread
 
-# ─── Main loop: event-driven via inotifywait ───
-# Timeout 30s: WSL2 /mnt/c/ can miss inotify events.
+# ─── Main loop: event-driven via fswatch ───
+# Timeout 30s: fswatchのイベント欠落時に定期再チェックする安全網。
 # Shorter timeout = faster escalation retry for stuck agents.
-INOTIFY_TIMEOUT=30
+FSWATCH_TIMEOUT=30
+
+fswatch_wait() {
+    python3 - "$INBOX" "$FSWATCH_TIMEOUT" <<'PY'
+import subprocess
+import sys
+
+path = sys.argv[1]
+timeout = float(sys.argv[2])
+
+proc = subprocess.Popen(
+    ["fswatch", "-1", "-o", path],
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+)
+try:
+    proc.wait(timeout=timeout)
+    sys.exit(proc.returncode)
+except subprocess.TimeoutExpired:
+    proc.terminate()
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+    sys.exit(2)
+PY
+}
 
 while true; do
     # Block until file is modified OR timeout (safety net for WSL2)
-    # set +e: inotifywait returns 2 on timeout, which would kill script under set -e
+    # set +e: fswatch_wait returns 2 on timeout, which would kill script under set -e
     set +e
-    inotifywait -q -t "$INOTIFY_TIMEOUT" -e modify -e close_write "$INBOX" 2>/dev/null
+    fswatch_wait
     rc=$?
     set -e
 
     # rc=0: event fired (instant delivery)
     # rc=1: watch invalidated — Claude Code uses atomic write (tmp+rename),
-    #        which replaces the inode. inotifywait sees DELETE_SELF → rc=1.
+    #        which replaces the inode. fswatch sees file replacement → rc=1.
     #        File still exists with new inode. Treat as event, re-watch next loop.
-    # rc=2: timeout (30s safety net for WSL2 inotify gaps)
-    # All cases: check for unread, then loop back to inotifywait (re-watches new inode)
+    # rc=2: timeout (30s safety net for fswatch gaps)
+    # All cases: check for unread, then loop back to fswatch (re-watches new inode)
     sleep 0.3
 
     process_unread

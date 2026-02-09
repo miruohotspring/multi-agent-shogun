@@ -247,9 +247,9 @@ else
 fi
 
 # ============================================================
-# STEP 4.5: Python3 / PyYAML / inotify-tools チェック
+# STEP 4.5: Python3 / PyYAML / fswatch チェック
 # ============================================================
-log_step "STEP 4.5: Python3 / PyYAML / inotify-tools チェック"
+log_step "STEP 4.5: Python3 / PyYAML / fswatch チェック"
 
 # --- python3 ---
 if command -v python3 &> /dev/null; then
@@ -300,25 +300,35 @@ else
     fi
 fi
 
-# --- inotify-tools (inotifywait) ---
-if command -v inotifywait &> /dev/null; then
-    log_success "inotify-tools がインストール済みです"
-    RESULTS+=("inotify-tools: OK")
+# --- fswatch ---
+if command -v fswatch &> /dev/null; then
+    log_success "fswatch がインストール済みです"
+    RESULTS+=("fswatch: OK")
 else
-    log_warn "inotify-tools がインストールされていません"
+    log_warn "fswatch がインストールされていません"
     if command -v apt-get &> /dev/null; then
-        log_info "inotify-tools をインストール中..."
-        if sudo apt-get install -y inotify-tools 2>/dev/null; then
-            log_success "inotify-tools インストール完了"
-            RESULTS+=("inotify-tools: インストール完了")
+        log_info "fswatch をインストール中..."
+        if sudo apt-get install -y fswatch 2>/dev/null; then
+            log_success "fswatch インストール完了"
+            RESULTS+=("fswatch: インストール完了")
         else
-            log_error "inotify-tools のインストールに失敗しました"
-            RESULTS+=("inotify-tools: インストール失敗")
+            log_error "fswatch のインストールに失敗しました"
+            RESULTS+=("fswatch: インストール失敗")
+            HAS_ERROR=true
+        fi
+    elif command -v brew &> /dev/null; then
+        log_info "fswatch をインストール中 (Homebrew)..."
+        if brew install fswatch 2>/dev/null; then
+            log_success "fswatch インストール完了"
+            RESULTS+=("fswatch: インストール完了")
+        else
+            log_error "fswatch のインストールに失敗しました"
+            RESULTS+=("fswatch: インストール失敗")
             HAS_ERROR=true
         fi
     else
-        log_error "apt-get が見つかりません。手動で inotify-tools をインストールしてください"
-        RESULTS+=("inotify-tools: 未インストール (手動インストール必要)")
+        log_error "apt-get/brew が見つかりません。手動で fswatch をインストールしてください"
+        RESULTS+=("fswatch: 未インストール (手動インストール必要)")
         HAS_ERROR=true
     fi
 fi

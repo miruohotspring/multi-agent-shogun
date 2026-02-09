@@ -52,7 +52,7 @@ multi-agent-shogun/
 │
 ├── scripts/              # Core utility scripts
 │   ├── inbox_write.sh    # Agent-to-agent messaging (file-based mailbox)
-│   ├── inbox_watcher.sh  # Event-driven delivery via inotifywait
+│   ├── inbox_watcher.sh  # Event-driven delivery via fswatch
 │   ├── ntfy.sh           # Push notifications to phone
 │   └── build_instructions.sh  # Generate CLI-specific instructions
 │

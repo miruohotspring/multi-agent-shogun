@@ -9,8 +9,8 @@
 #   T-SW-003: send_wakeup — send-keys content is "inboxN" + Enter (separated)
 #   T-SW-004: send_wakeup — send-keys failure → return 1
 #   T-SW-005: send_wakeup — no paste-buffer or set-buffer used
-#   T-SW-006: agent_has_self_watch — detects inotifywait process
-#   T-SW-007: agent_has_self_watch — no inotifywait → returns 1
+#   T-SW-006: agent_has_self_watch — detects fswatch process
+#   T-SW-007: agent_has_self_watch — no fswatch → returns 1
 #   T-SW-008: send_cli_command — /clear uses send-keys
 #   T-SW-009: send_cli_command — /model uses send-keys
 #   T-SW-010: nudge content format — inboxN (backward compatible)
@@ -66,7 +66,7 @@ MOCK
     export MOCK_SENDKEYS_RC=0
 
     # Test harness: sets up mocks, then sources the REAL inbox_watcher.sh
-    # __INBOX_WATCHER_TESTING__=1 skips arg parsing, inotifywait check, and main loop.
+    # __INBOX_WATCHER_TESTING__=1 skips arg parsing, fswatch check, and main loop.
     # Only function definitions are loaded — testing actual production code.
     export TEST_HARNESS="$TEST_TMPDIR/test_harness.sh"
     cat > "$TEST_HARNESS" << HARNESS
@@ -116,7 +116,7 @@ teardown() {
 @test "T-SW-001: send_wakeup skips nudge when agent has active self-watch" {
     cat > "$MOCK_PGREP" << 'MOCK'
 #!/bin/bash
-echo "12345 inotifywait -q -t 120 -e modify inbox/test_agent.yaml"
+echo "12345 fswatch -1 -o inbox/test_agent.yaml"
 exit 0
 MOCK
     chmod +x "$MOCK_PGREP"
@@ -176,12 +176,12 @@ MOCK
     grep -q "send-keys" "$MOCK_LOG"
 }
 
-# --- T-SW-006: agent_has_self_watch — detects inotifywait ---
+# --- T-SW-006: agent_has_self_watch — detects fswatch ---
 
-@test "T-SW-006: agent_has_self_watch returns 0 when inotifywait running" {
+@test "T-SW-006: agent_has_self_watch returns 0 when fswatch running" {
     cat > "$MOCK_PGREP" << 'MOCK'
 #!/bin/bash
-echo "99999 inotifywait -q -t 120 -e modify inbox/test_agent.yaml"
+echo "99999 fswatch -1 -o inbox/test_agent.yaml"
 exit 0
 MOCK
     chmod +x "$MOCK_PGREP"
@@ -190,9 +190,9 @@ MOCK
     [ "$status" -eq 0 ]
 }
 
-# --- T-SW-007: agent_has_self_watch — no inotifywait ---
+# --- T-SW-007: agent_has_self_watch — no fswatch ---
 
-@test "T-SW-007: agent_has_self_watch returns 1 when no inotifywait" {
+@test "T-SW-007: agent_has_self_watch returns 1 when no fswatch" {
     run bash -c "source '$TEST_HARNESS' && agent_has_self_watch"
     [ "$status" -eq 1 ]
 }
