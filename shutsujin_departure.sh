@@ -301,7 +301,7 @@ fi
 # queue ディレクトリが存在しない場合は作成（初回起動時に必要）
 [ -d ./queue/reports ] || mkdir -p ./queue/reports
 [ -d ./queue/tasks ] || mkdir -p ./queue/tasks
-# inbox はLinux FSにシンボリックリンク（WSL2の/mnt/c/ではinotifywaitが動かないため）
+# inbox はLinux FSにシンボリックリンク（WSL2の/mnt/c/ではfswatchが動かないため）
 INBOX_LINUX_DIR="$HOME/.local/share/multi-agent-shogun/inbox"
 if [ ! -L ./queue/inbox ]; then
     mkdir -p "$INBOX_LINUX_DIR"
@@ -770,9 +770,9 @@ NINJA_EOF
         [ -f "$SCRIPT_DIR/queue/inbox/${agent}.yaml" ] || echo "messages:" > "$SCRIPT_DIR/queue/inbox/${agent}.yaml"
     done
 
-    # 既存のwatcherと孤児inotifywaitをkill
+    # 既存のwatcherと孤児fswatchをkill
     pkill -f "inbox_watcher.sh" 2>/dev/null || true
-    pkill -f "inotifywait.*queue/inbox" 2>/dev/null || true
+    pkill -f "fswatch.*queue/inbox" 2>/dev/null || true
     sleep 1
 
     # 将軍のwatcherは不要（殿が直接操作するペインのため、nudgeが邪魔になる）

@@ -38,7 +38,7 @@ Multi-perspective research with integrated authorization. Important decisions ar
 ### Why Mailbox System?
 
 1. **State persistence**: YAML files provide structured communication that survives agent restarts
-2. **No polling needed**: `inotifywait` is event-driven (kernel-level), reducing API costs to zero during idle
+2. **No polling needed**: `fswatch` is event-driven (filesystem events), reducing API costs to zero during idle
 3. **No interruptions**: Prevents agents from interrupting each other or your input
 4. **Easy debugging**: Humans can read inbox YAML files directly to understand message flow
 5. **No conflicts**: `flock` (exclusive lock) prevents concurrent writes — multiple agents can send simultaneously without race conditions

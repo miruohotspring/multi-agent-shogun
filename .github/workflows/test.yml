@@ -169,7 +169,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-yaml tmux inotify-tools
+          sudo apt-get install -y python3-yaml tmux fswatch
 
       - name: Run integration tests
         run: |

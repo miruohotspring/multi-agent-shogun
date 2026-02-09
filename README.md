@@ -513,7 +513,7 @@ Step 1: Write the message          Step 2: Wake the agent up
 │ inbox_write.sh       │           │ inbox_watcher.sh         │
 │                      │           │                          │
 │ Writes full message  │  file     │ Detects file change      │
-│ to ashigaru3.yaml    │──change──▶│ (inotifywait, not poll)  │
+│ to ashigaru3.yaml    │──change──▶│ (fswatch, not poll)      │
 │ with flock (no race) │           │                          │
 └──────────────────────┘           │ Wakes agent via:         │
                                    │  1. Self-watch (skip)    │
@@ -534,12 +534,12 @@ Step 3: Agent reads its own inbox
 
 | Priority | Method | What happens | When used |
 |----------|--------|-------------|-----------|
-| 1st | **Self-Watch** | Agent watches its own inbox file — wakes itself, no nudge needed | Agent has its own `inotifywait` running |
+| 1st | **Self-Watch** | Agent watches its own inbox file — wakes itself, no nudge needed | Agent has its own `fswatch` running |
 | 2nd | **pty direct write** | Writes nudge directly to the agent's pty device (`/dev/pts/N`) — completely bypasses tmux | Default — no cursor bugs, no key conflicts, CLI-agnostic |
 
 **Key design choices:**
 - **Message content is never sent through tmux** — only a short "you have mail" nudge. The agent reads its own file. This eliminates character corruption and transmission hangs.
-- **Zero CPU while idle** — `inotifywait` blocks on a kernel event (not a poll loop). CPU usage is 0% between messages.
+- **Zero CPU while idle** — `fswatch` blocks on filesystem events (not a poll loop). CPU usage is 0% between messages.
 - **Guaranteed delivery** — If the file write succeeded, the message is there. No lost messages, no retries needed.
 
 ### 📸 5. Screenshot Integration
@@ -965,7 +965,7 @@ Why use files instead of direct messaging between agents?
 | Problem with direct messaging | How mailbox solves it |
 |-------------------------------|----------------------|
 | Agent crashes → message lost | YAML files survive restarts |
-| Polling wastes API calls | `inotifywait` is event-driven (zero CPU while idle) |
+| Polling wastes API calls | `fswatch` is event-driven (zero CPU while idle) |
 | Agents interrupt each other | Each agent has its own inbox file — no cross-talk |
 | Hard to debug | Open any `.yaml` file to see exact message history |
 | Concurrent writes corrupt data | `flock` (exclusive lock) serializes writes automatically |
@@ -1311,7 +1311,7 @@ multi-agent-shogun/
 │
 ├── scripts/                  # Utility scripts
 │   ├── inbox_write.sh        # Write messages to agent inbox
-│   ├── inbox_watcher.sh      # Watch inbox changes via inotifywait
+│   ├── inbox_watcher.sh      # Watch inbox changes via fswatch
 │   ├── ntfy.sh               # Send push notifications to phone
 │   └── ntfy_listener.sh      # Stream incoming messages from phone
 │
