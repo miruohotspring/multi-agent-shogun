@@ -28,6 +28,7 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
     set -euo pipefail
 
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
     AGENT_ID="$1"
     PANE_TARGET="$2"
     CLI_TYPE="${3:-claude}"  # CLI種別（claude/codex/copilot）。未指定→claude（後方互換）
@@ -37,6 +38,11 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
 
     if [ -z "$AGENT_ID" ] || [ -z "$PANE_TARGET" ]; then
         echo "Usage: inbox_watcher.sh <agent_id> <pane_target> [cli_type]" >&2
+        exit 1
+    fi
+
+    if [ ! -x "$PYTHON_BIN" ]; then
+        echo "[inbox_watcher] ERROR: system python not found: $PYTHON_BIN" >&2
         exit 1
     fi
 
@@ -54,6 +60,8 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
         exit 1
     fi
 fi
+
+PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 
 # ─── Escalation state ───
 # Time-based escalation: track how long unread messages have been waiting
@@ -178,7 +186,7 @@ no_idle_full_read() {
 
 # summary-first: unread_count fast-path before full read
 get_unread_count_fast() {
-    INBOX_PATH="$INBOX" python3 - << 'PY'
+    INBOX_PATH="$INBOX" "$PYTHON_BIN" - << 'PY'
 import json
 import os
 import yaml
@@ -201,7 +209,7 @@ PY
 get_unread_info() {
     (
         flock -x 200
-        INBOX_PATH="$INBOX" python3 - << 'PY'
+        INBOX_PATH="$INBOX" "$PYTHON_BIN" - << 'PY'
 import json
 import os
 import yaml
@@ -266,6 +274,11 @@ send_cli_command() {
                 sleep 0.3
                 timeout 5 tmux send-keys -t "$PANE_TARGET" Enter 2>/dev/null
                 sleep 3
+                # Post-/new nudge: send inbox1 to wake new session
+                echo "[$(date)] [SEND-KEYS] Post-/new nudge for $AGENT_ID" >&2
+                timeout 5 tmux send-keys -t "$PANE_TARGET" "inbox1" 2>/dev/null
+                sleep 0.3
+                timeout 5 tmux send-keys -t "$PANE_TARGET" Enter 2>/dev/null
                 return 0
             fi
             if [[ "$cmd" == /model* ]]; then
@@ -283,6 +296,11 @@ send_cli_command() {
                 sleep 0.3
                 timeout 5 tmux send-keys -t "$PANE_TARGET" Enter 2>/dev/null
                 sleep 3
+                # Post-restart nudge: send inbox1 to wake new session
+                echo "[$(date)] [SEND-KEYS] Post-restart nudge for $AGENT_ID" >&2
+                timeout 5 tmux send-keys -t "$PANE_TARGET" "inbox1" 2>/dev/null
+                sleep 0.3
+                timeout 5 tmux send-keys -t "$PANE_TARGET" Enter 2>/dev/null
                 return 0
             fi
             if [[ "$cmd" == /model* ]]; then
@@ -307,6 +325,11 @@ send_cli_command() {
     # /clear needs extra wait time before follow-up
     if [[ "$actual_cmd" == "/clear" ]]; then
         sleep 3
+        # Post-clear nudge: send inbox1 to wake new session
+        echo "[$(date)] [SEND-KEYS] Post-clear nudge for $AGENT_ID" >&2
+        timeout 5 tmux send-keys -t "$PANE_TARGET" "inbox1" 2>/dev/null
+        sleep 0.3
+        timeout 5 tmux send-keys -t "$PANE_TARGET" Enter 2>/dev/null
     else
         sleep 1
     fi
@@ -428,7 +451,7 @@ process_unread() {
     local fast_info
     fast_info=$(get_unread_count_fast)
     local fast_count
-    fast_count=$(echo "$fast_info" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
+    fast_count=$(echo "$fast_info" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
 
     if no_idle_full_read "$trigger" && [ "$fast_count" -eq 0 ] 2>/dev/null; then
         # no_idle_full_read guard: unread=0 and timeout path → no full inbox read
@@ -453,7 +476,7 @@ process_unread() {
 
     # Handle special CLI commands first (/clear, /model)
     local specials
-    specials=$(echo "$info" | python3 -c "
+    specials=$(echo "$info" | "$PYTHON_BIN" -c "
 import sys, json
 data = json.load(sys.stdin)
 for s in data.get('specials', []):
@@ -473,7 +496,7 @@ for s in data.get('specials', []):
 
     # Send wake-up nudge for normal messages (with escalation)
     local normal_count
-    normal_count=$(echo "$info" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
+    normal_count=$(echo "$info" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
 
     if [ "$normal_count" -gt 0 ] 2>/dev/null; then
         local now
@@ -539,8 +562,35 @@ process_unread_once() {
     process_unread "startup"
 }
 
+watch_dashboard() {
+    local dashboard="$SCRIPT_DIR/dashboard.md"
+    echo "[$(date)] dashboard_watcher started - watching $dashboard" >&2
+    while true; do
+        local rc=0
+        inotifywait -q -t 60 -e modify -e close_write -e moved_to "$dashboard" 2>/dev/null || rc=$?
+        if [ "$rc" -ne 2 ]; then
+            # dashboard.md changed -> notify shogun inbox
+            sleep 1
+            bash "$SCRIPT_DIR/scripts/inbox_write.sh" shogun "dashboard更新あり" dashboard_updated system
+            echo "[$(date)] dashboard_updated sent to shogun inbox" >&2
+        fi
+    done
+}
+
 # ─── Startup & Main loop (skipped in testing mode) ───
 if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
+
+# Dashboard watcher (shogun only)
+if [[ "$AGENT_ID" == "shogun" ]]; then
+    watch_dashboard &
+    DASHBOARD_WATCHER_PID=$!
+    echo "[$(date)] dashboard_watcher started (PID: $DASHBOARD_WATCHER_PID)" >&2
+fi
+
+cleanup() {
+    [ -n "${DASHBOARD_WATCHER_PID:-}" ] && kill "$DASHBOARD_WATCHER_PID" 2>/dev/null
+}
+trap cleanup EXIT
 
 # ─── Startup: process any existing unread messages ───
 process_unread_once
