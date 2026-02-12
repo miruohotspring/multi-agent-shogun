@@ -250,35 +250,36 @@ fi
 # STEP 4.5: Python3 / PyYAML / inotify-tools チェック
 # ============================================================
 log_step "STEP 4.5: Python3 / PyYAML / inotify-tools チェック"
+SYSTEM_PYTHON="/usr/bin/python3"
 
 # --- python3 ---
-if command -v python3 &> /dev/null; then
-    PY3_VERSION=$(python3 --version 2>&1)
-    log_success "python3 がインストール済みです ($PY3_VERSION)"
-    RESULTS+=("python3: OK ($PY3_VERSION)")
+if [ -x "$SYSTEM_PYTHON" ]; then
+    PY3_VERSION=$("$SYSTEM_PYTHON" --version 2>&1)
+    log_success "system python3 がインストール済みです ($PY3_VERSION)"
+    RESULTS+=("system python3: OK ($PY3_VERSION)")
 else
-    log_warn "python3 がインストールされていません"
+    log_warn "system python3 ($SYSTEM_PYTHON) がインストールされていません"
     if command -v apt-get &> /dev/null; then
         log_info "python3 をインストール中..."
         sudo apt-get update -qq 2>/dev/null
         if sudo apt-get install -y python3 2>/dev/null; then
-            PY3_VERSION=$(python3 --version 2>&1)
-            log_success "python3 インストール完了 ($PY3_VERSION)"
-            RESULTS+=("python3: インストール完了 ($PY3_VERSION)")
+            PY3_VERSION=$("$SYSTEM_PYTHON" --version 2>&1)
+            log_success "system python3 インストール完了 ($PY3_VERSION)"
+            RESULTS+=("system python3: インストール完了 ($PY3_VERSION)")
         else
-            log_error "python3 のインストールに失敗しました"
-            RESULTS+=("python3: インストール失敗")
+            log_error "system python3 のインストールに失敗しました"
+            RESULTS+=("system python3: インストール失敗")
             HAS_ERROR=true
         fi
     else
-        log_error "apt-get が見つかりません。手動で python3 をインストールしてください"
-        RESULTS+=("python3: 未インストール (手動インストール必要)")
+        log_error "apt-get が見つかりません。手動で system python3 をインストールしてください"
+        RESULTS+=("system python3: 未インストール (手動インストール必要)")
         HAS_ERROR=true
     fi
 fi
 
 # --- PyYAML (python3-yaml) ---
-if python3 -c "import yaml" 2>/dev/null; then
+if "$SYSTEM_PYTHON" -c "import yaml" 2>/dev/null; then
     log_success "PyYAML がインストール済みです"
     RESULTS+=("PyYAML: OK")
 else

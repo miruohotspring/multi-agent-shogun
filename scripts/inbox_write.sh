@@ -6,6 +6,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 TARGET="$1"
 CONTENT="$2"
 TYPE="${3:-wake_up}"
@@ -17,6 +18,11 @@ LOCKFILE="${INBOX}.lock"
 # Validate arguments
 if [ -z "$TARGET" ] || [ -z "$CONTENT" ]; then
     echo "Usage: inbox_write.sh <target_agent> <content> [type] [from]" >&2
+    exit 1
+fi
+
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "[inbox_write] ERROR: system python not found: $PYTHON_BIN" >&2
     exit 1
 fi
 
@@ -38,8 +44,8 @@ while [ $attempt -lt $max_attempts ]; do
     if (
         flock -w 5 200 || exit 1
 
-        # Add message via python3 (unified YAML handling)
-        python3 -c "
+        # Add message via /usr/bin/python3 (unified YAML handling)
+        "$PYTHON_BIN" -c "
 import yaml, sys
 
 try:

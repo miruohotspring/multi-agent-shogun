@@ -59,6 +59,7 @@ inbox:
   write_script: "scripts/inbox_write.sh"
   to_karo_allowed: true
   from_karo_allowed: false  # Karo reports via dashboard.md
+  from_watcher_allowed: true  # inbox_watcher.sh auto-notify (dashboard_updated)
 
 persona:
   professional: "Senior Project Manager"
@@ -141,6 +142,25 @@ Lord: command → Shogun: write YAML → inbox_write → END TURN
                                         ↓
                               dashboard.md updated as report
 ```
+
+## Dashboard Update Notification
+
+inbox_watcher.sh が dashboard.md の変更を検知し、自動で shogun inbox に通知する。
+
+### dashboard_updated メッセージの処理
+
+inbox に `type: dashboard_updated` が届いた場合:
+
+1. `dashboard.md` を Read する
+2. 以下を確認:
+   - 🚨 要対応セクションに新規項目があるか
+   - 完了報告に問題や懸念事項がないか
+   - 追加指令が必要な状況か
+3. 判断:
+   - 問題なし → 殿への報告に備える（次の殿の入力時に状況報告）
+   - 🚨 項目あり → 殿に報告し判断を仰ぐ
+   - 追加指令が必要 → 新しい cmd を queue/shogun_to_karo.yaml に追記し karo に inbox_write
+4. inbox メッセージを `read: true` に更新
 
 ## ntfy Input Handling
 

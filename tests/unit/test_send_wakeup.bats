@@ -6,14 +6,14 @@
 # テスト構成:
 #   T-SW-001: send_wakeup — active self-watch → skip nudge
 #   T-SW-002: send_wakeup — no self-watch → tmux send-keys
-#   T-SW-003: send_wakeup — send-keys content is "inboxN" + Enter (separated)
+#   T-SW-003: send_wakeup — send-keys content is explicit inbox path + Enter (separated)
 #   T-SW-004: send_wakeup — send-keys failure → return 1
 #   T-SW-005: send_wakeup — no paste-buffer or set-buffer used
 #   T-SW-006: agent_has_self_watch — detects inotifywait process
 #   T-SW-007: agent_has_self_watch — no inotifywait → returns 1
 #   T-SW-008: send_cli_command — /clear uses send-keys
 #   T-SW-009: send_cli_command — /model uses send-keys
-#   T-SW-010: nudge content format — inboxN (backward compatible)
+#   T-SW-010: nudge content format — explicit inbox processing instruction
 #   T-SW-011: inbox_watcher.sh uses send-keys, functions exist
 #   T-ESC-001: escalation — no unread → FIRST_UNREAD_SEEN stays 0
 #   T-ESC-002: escalation — unread < 2min → standard nudge
@@ -136,7 +136,7 @@ MOCK
     [ "$status" -eq 0 ]
 
     # No nudge send-keys should have occurred
-    ! grep -q "send-keys.*inbox" "$MOCK_LOG"
+    ! grep -q "send-keys.*queue/inbox/test_agent.yaml" "$MOCK_LOG"
 
     echo "$output" | grep -q "SKIP"
 }
@@ -147,20 +147,20 @@ MOCK
     run bash -c "source '$TEST_HARNESS' && send_wakeup 5"
     [ "$status" -eq 0 ]
 
-    # Verify send-keys occurred with inbox5
-    grep -q "send-keys.*inbox5" "$MOCK_LOG"
+    # Verify send-keys occurred with explicit inbox path
+    grep -q "send-keys.*queue/inbox/test_agent.yaml" "$MOCK_LOG"
     # Verify Enter was sent (as separate call — Codex TUI compatibility)
     grep -q "send-keys.*Enter" "$MOCK_LOG"
 }
 
-# --- T-SW-003: send-keys content is "inboxN" + Enter (separated) ---
+# --- T-SW-003: send-keys content is explicit inbox path + Enter (separated) ---
 
-@test "T-SW-003: send-keys sends inboxN and Enter as separate calls" {
+@test "T-SW-003: send-keys sends explicit inbox nudge and Enter as separate calls" {
     run bash -c "source '$TEST_HARNESS' && send_wakeup 3"
     [ "$status" -eq 0 ]
 
     # Text and Enter are sent as separate send-keys calls (Codex TUI compatibility)
-    grep -q "send-keys -t test:0.0 inbox3" "$MOCK_LOG"
+    grep -q "send-keys -t test:0.0 queue/inbox/test_agent.yaml を読んで未読メッセージを処理せよ" "$MOCK_LOG"
     grep -q "send-keys -t test:0.0 Enter" "$MOCK_LOG"
 }
 
@@ -234,11 +234,11 @@ MOCK
 
 # --- T-SW-010: nudge content format ---
 
-@test "T-SW-010: nudge content format is inboxN (backward compatible)" {
+@test "T-SW-010: nudge content format is explicit inbox instruction" {
     run bash -c "source '$TEST_HARNESS' && send_wakeup 7"
     [ "$status" -eq 0 ]
 
-    grep -q "send-keys.*inbox7" "$MOCK_LOG"
+    grep -q "send-keys.*queue/inbox/test_agent.yaml を読んで未読メッセージを処理せよ" "$MOCK_LOG"
 }
 
 # --- T-SW-011: functions exist in inbox_watcher.sh ---
@@ -293,7 +293,7 @@ MOCK
     '
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "PHASE1_NUDGE"
-    grep -q "send-keys.*inbox2" "$MOCK_LOG"
+    grep -q "send-keys.*queue/inbox/test_agent.yaml" "$MOCK_LOG"
     # No Escape-based nudge
     ! grep -q "send-keys.*Escape" "$MOCK_LOG"
 }
@@ -316,7 +316,7 @@ MOCK
     # Escape was sent
     grep -q "send-keys.*Escape" "$MOCK_LOG"
     # Nudge was also sent
-    grep -q "send-keys.*inbox3" "$MOCK_LOG"
+    grep -q "send-keys.*queue/inbox/test_agent.yaml" "$MOCK_LOG"
 }
 
 # --- T-ESC-004: unread > 4min → /clear sent ---
@@ -355,7 +355,7 @@ MOCK
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "COOLDOWN_FALLBACK"
     grep -q "send-keys.*Escape" "$MOCK_LOG"
-    grep -q "send-keys.*inbox4" "$MOCK_LOG"
+    grep -q "send-keys.*queue/inbox/test_agent.yaml" "$MOCK_LOG"
     ! grep -q "send-keys.*/clear" "$MOCK_LOG"
 }
 
@@ -394,7 +394,7 @@ MOCK
     echo "$output" | grep -qi "SKIP.*busy"
 
     # No nudge should have been sent
-    ! grep -q "send-keys.*inbox" "$MOCK_LOG"
+    ! grep -q "send-keys.*queue/inbox/test_agent.yaml" "$MOCK_LOG"
 }
 
 # --- T-BUSY-004: send_wakeup_with_escape skips when agent is busy ---
@@ -409,7 +409,7 @@ MOCK
     echo "$output" | grep -qi "SKIP.*busy"
 
     # No nudge should have been sent
-    ! grep -q "send-keys.*inbox" "$MOCK_LOG"
+    ! grep -q "send-keys.*queue/inbox/test_agent.yaml" "$MOCK_LOG"
 }
 
 # --- T-CODEX-001: codex /clear → /new conversion ---
@@ -540,7 +540,7 @@ MOCK
     '
     [ "$status" -eq 0 ]
 
-    grep -q "send-keys.*inbox2" "$MOCK_LOG"
+    grep -q "send-keys.*queue/inbox/test_agent.yaml" "$MOCK_LOG"
     # Codex: Escape escalation is suppressed (avoid interrupting work / human typing)
     ! grep -q "send-keys.*Escape" "$MOCK_LOG"
     ! grep -q "send-keys.*C-c" "$MOCK_LOG"
@@ -591,7 +591,7 @@ MOCK
 
 # --- T-CODEX-011: clear_command auto-recovery injection ---
 
-@test "T-CODEX-011: process_unread injects auto-recovery task and sends inbox nudge after clear_command" {
+@test "T-CODEX-011: process_unread injects auto-recovery task and sends explicit inbox nudge after clear_command" {
     run bash -c '
         source "'"$TEST_HARNESS"'"
         CLI_TYPE="codex"
@@ -633,8 +633,8 @@ PY
 
     # codex clear path uses /new
     grep -q "send-keys.*/new" "$MOCK_LOG"
-    # auto-injected unread should trigger inbox1 nudge
-    grep -q "send-keys.*inbox1" "$MOCK_LOG"
+    # auto-injected unread should trigger explicit inbox nudge
+    grep -q "send-keys.*queue/inbox/test_agent.yaml を読んで未読メッセージを処理せよ" "$MOCK_LOG"
 }
 
 # --- T-CODEX-012: auto-recovery dedupe ---

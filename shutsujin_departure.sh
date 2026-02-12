@@ -580,6 +580,22 @@ echo ""
 if [ "$SETUP_ONLY" = false ]; then
     # CLI の存在チェック（Multi-CLI対応）
     if [ "$CLI_ADAPTER_LOADED" = true ]; then
+        # CLI adapter は settings.yaml 解析に PyYAML を使用
+        # 未導入だと get_cli_type が黙って claude フォールバックするため、ここで明示的に停止
+        if ! /usr/bin/python3 -c "import yaml" &>/dev/null; then
+            echo ""
+            echo "  ╔════════════════════════════════════════════════════════════╗"
+            echo "  ║  [ERROR] PyYAML (python3-yaml) not found                  ║"
+            echo "  ║  cli設定を読み込めないため、Multi-CLI起動を中止しました     ║"
+            echo "  ╠════════════════════════════════════════════════════════════╣"
+            echo "  ║  Install one of the following:                            ║"
+            echo "  ║    sudo apt-get install -y python3-yaml                   ║"
+            echo "  ║    pip3 install --user pyyaml                             ║"
+            echo "  ╚════════════════════════════════════════════════════════════╝"
+            echo ""
+            exit 1
+        fi
+
         _default_cli=$(get_cli_type "")
         if ! validate_cli_availability "$_default_cli"; then
             exit 1
@@ -597,7 +613,7 @@ if [ "$SETUP_ONLY" = false ]; then
 
     # 将軍: CLI Adapter経由でコマンド構築
     _shogun_cli_type="claude"
-    _shogun_cmd="claude --model opus --dangerously-skip-permissions"
+    _shogun_cmd="claude --model sonnet --dangerously-skip-permissions"
     if [ "$CLI_ADAPTER_LOADED" = true ]; then
         _shogun_cli_type=$(get_cli_type "shogun")
         _shogun_cmd=$(build_cli_command "shogun")
@@ -619,7 +635,7 @@ if [ "$SETUP_ONLY" = false ]; then
     # 家老（pane 0）: CLI Adapter経由でコマンド構築
     p=$((PANE_BASE + 0))
     _karo_cli_type="claude"
-    _karo_cmd="claude --model opus --dangerously-skip-permissions"
+    _karo_cmd="claude --model sonnet --dangerously-skip-permissions"
     if [ "$CLI_ADAPTER_LOADED" = true ]; then
         _karo_cli_type=$(get_cli_type "karo")
         _karo_cmd=$(build_cli_command "karo")

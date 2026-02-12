@@ -119,8 +119,18 @@ Two layers:
    - **優先度1**: Agent self-watch (agent's own `inotifywait` on its inbox) → no nudge needed
    - **優先度2**: `tmux send-keys` — short nudge only (text and Enter sent separately, 0.3s gap)
 
-The nudge is minimal: `inboxN` (e.g. `inbox3` = 3 unread). That's it.
-**Agent reads the inbox file itself.** Message content never travels through tmux — only a short wake-up signal.
+Nudge format:
+`queue/inbox/{agent_id}.yaml を読んで未読メッセージを処理せよ`
+**Agent reads the inbox file itself.** Message content never travels through tmux — only this explicit wake-up instruction.
+
+### Dashboard監視（将軍自動通知）
+
+inbox_watcher.sh の将軍インスタンスが dashboard.md も inotifywait で監視。
+変更検知時、`inbox_write.sh shogun "dashboard更新あり" dashboard_updated system` を自動発行。
+
+- tmux send-keys による将軍への nudge は行わない（殿の入力妨害防止）
+- karo が直接 inbox_write で shogun に送信することは引き続き禁止
+- watcher（system）経由の自動通知のみ許可
 
 Special cases (CLI commands sent via `tmux send-keys`):
 - `type: clear_command` → sends `/clear` + Enter via send-keys
@@ -136,12 +146,29 @@ Special cases (CLI commands sent via `tmux send-keys`):
 
 ## Inbox Processing Protocol (karo/ashigaru)
 
-When you receive `inboxN` (e.g. `inbox3`):
+When you receive the explicit nudge:
+`queue/inbox/{your_id}.yaml を読んで未読メッセージを処理せよ`
 1. `Read queue/inbox/{your_id}.yaml`
 2. Find all entries with `read: false`
 3. Process each message according to its `type`
 4. Update each processed entry: `read: true` (use Edit tool)
 5. Resume normal workflow
+
+### Nudge Specification (Updated: cmd_027)
+
+inbox_watcher.sh sends the following nudge when inbox file changes:
+
+```
+queue/inbox/{agent_id}.yaml を読んで未読メッセージを処理せよ
+```
+
+This explicit instruction ensures agents immediately:
+1. Read their inbox file using the Read tool
+2. Process unread messages (`read: false`)
+3. Update each processed message to `read: true`
+4. Resume normal workflow
+
+Previous nudge format (`inboxN`) was too abstract and caused stalls.
 
 ### MANDATORY Post-Task Inbox Check
 
@@ -169,7 +196,7 @@ Race condition is eliminated: `/clear` wipes old context. Agent re-reads YAML wi
 | Direction | Method | Reason |
 |-----------|--------|--------|
 | Ashigaru → Karo | Report YAML + inbox_write | File-based notification |
-| Karo → Shogun/Lord | dashboard.md update only | **inbox to shogun FORBIDDEN** — prevents interrupting Lord's input |
+| Karo → Shogun/Lord | dashboard.md update only | **karo直接のinbox to shogun FORBIDDEN** — watcher自動通知のみ許可。手動inbox_writeは禁止 |
 | Top → Down | YAML + inbox_write | Standard wake-up |
 
 ## File Operation Rule

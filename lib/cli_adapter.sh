@@ -13,6 +13,12 @@
 CLI_ADAPTER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_ADAPTER_PROJECT_ROOT="$(cd "${CLI_ADAPTER_DIR}/.." && pwd)"
 CLI_ADAPTER_SETTINGS="${CLI_ADAPTER_SETTINGS:-${CLI_ADAPTER_PROJECT_ROOT}/config/settings.yaml}"
+CLI_ADAPTER_PYTHON="${CLI_ADAPTER_PYTHON:-/usr/bin/python3}"
+
+if [[ ! -x "$CLI_ADAPTER_PYTHON" ]]; then
+    echo "[ERROR] System Python not found: $CLI_ADAPTER_PYTHON" >&2
+    return 1 2>/dev/null || exit 1
+fi
 
 # 許可されたCLI種別
 CLI_ADAPTER_ALLOWED_CLIS="claude codex copilot kimi"
@@ -20,12 +26,12 @@ CLI_ADAPTER_ALLOWED_CLIS="claude codex copilot kimi"
 # --- 内部ヘルパー ---
 
 # _cli_adapter_read_yaml key [fallback]
-# python3でsettings.yamlから値を読み取る
+# /usr/bin/python3でsettings.yamlから値を読み取る
 _cli_adapter_read_yaml() {
     local key_path="$1"
     local fallback="${2:-}"
     local result
-    result=$(python3 -c "
+    result=$("$CLI_ADAPTER_PYTHON" -c "
 import yaml, sys
 try:
     with open('${CLI_ADAPTER_SETTINGS}') as f:
@@ -76,7 +82,7 @@ get_cli_type() {
     fi
 
     local result
-    result=$(python3 -c "
+    result=$("$CLI_ADAPTER_PYTHON" -c "
 import yaml, sys
 try:
     with open('${CLI_ADAPTER_SETTINGS}') as f:
@@ -259,7 +265,7 @@ get_agent_model() {
         *)
             # Claude Code/Codex/Copilot用デフォルトモデル（kessen/heiji互換）
             case "$agent_id" in
-                shogun|karo)    echo "opus" ;;
+                shogun|karo)    echo "sonnet" ;;
                 ashigaru[1-4])  echo "sonnet" ;;
                 ashigaru[5-8])  echo "opus" ;;
                 *)              echo "sonnet" ;;

@@ -7,6 +7,7 @@
 # ═══════════════════════════════════════════════════════════════
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 SETTINGS="$SCRIPT_DIR/config/settings.yaml"
 TOPIC=$(grep 'ntfy_topic:' "$SETTINGS" | awk '{print $2}' | tr -d '"')
 INBOX="$SCRIPT_DIR/queue/ntfy_inbox.yaml"
@@ -19,6 +20,11 @@ source "$SCRIPT_DIR/lib/ntfy_auth.sh"
 
 if [ -z "$TOPIC" ]; then
     echo "[ntfy_listener] ntfy_topic not configured in settings.yaml" >&2
+    exit 1
+fi
+
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "[ntfy_listener] ERROR: system python not found: $PYTHON_BIN" >&2
     exit 1
 fi
 
@@ -36,13 +42,13 @@ while IFS= read -r line; do
     [ -n "$line" ] && AUTH_ARGS+=("$line")
 done < <(ntfy_get_auth_args "$SCRIPT_DIR/config/ntfy_auth.env")
 
-# JSON field extractor (python3 — jq not available)
+# JSON field extractor (/usr/bin/python3 — jq not available)
 parse_json() {
-    python3 -c "import sys,json; print(json.load(sys.stdin).get('$1',''))" 2>/dev/null
+    "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('$1',''))" 2>/dev/null
 }
 
 parse_tags() {
-    python3 -c "import sys,json; print(','.join(json.load(sys.stdin).get('tags',[])))" 2>/dev/null
+    "$PYTHON_BIN" -c "import sys,json; print(','.join(json.load(sys.stdin).get('tags',[])))" 2>/dev/null
 }
 
 append_ntfy_inbox() {
@@ -57,7 +63,7 @@ append_ntfy_inbox() {
         MSG_ID="$msg_id" \
         MSG_TS="$ts" \
         MSG_TEXT="$msg" \
-        python3 - << 'PY'
+        "$PYTHON_BIN" - << 'PY'
 import datetime
 import os
 import shutil

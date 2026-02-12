@@ -110,12 +110,12 @@ install-deps:
 		git clone --depth 1 https://github.com/bats-core/bats-assert tests/test_helper/bats-assert; \
 	fi
 	@echo "3. Checking system dependencies..."
-	@if ! command -v python3 >/dev/null 2>&1; then \
-		echo "WARNING: python3 not found (required for YAML parsing)"; \
+	@if [ ! -x /usr/bin/python3 ]; then \
+		echo "WARNING: /usr/bin/python3 not found (required for YAML parsing)"; \
 	fi
-	@if ! python3 -c "import yaml" 2>/dev/null; then \
+	@if ! /usr/bin/python3 -c "import yaml" 2>/dev/null; then \
 		echo "WARNING: python3-yaml not found"; \
-		echo "Install: sudo apt-get install python3-yaml (Linux) or pip3 install pyyaml (Mac)"; \
+		echo "Install: sudo apt-get install python3-yaml"; \
 	fi
 	@echo "✓ Dependencies installed"
 

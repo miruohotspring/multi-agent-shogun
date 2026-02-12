@@ -28,6 +28,14 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
     set -euo pipefail
 
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN="python3"
+    elif command -v python >/dev/null 2>&1; then
+        PYTHON_BIN="python"
+    else
+        echo "[inbox_watcher] ERROR: python runtime not found (python3/python)" >&2
+        exit 1
+    fi
     AGENT_ID="$1"
     PANE_TARGET="$2"
     CLI_TYPE="${3:-claude}"  # CLI種別（claude/codex/copilot）。未指定→claude（後方互換）
@@ -64,7 +72,7 @@ ESCALATE_PHASE2=${ESCALATE_PHASE2:-240}
 ESCALATE_COOLDOWN=${ESCALATE_COOLDOWN:-300}
 
 # ─── Nudge throttle ───
-# Avoid spamming the same "inboxN" into the pane every timeout tick.
+# Avoid spamming the same nudge into the pane every timeout tick.
 LAST_NUDGE_TS=${LAST_NUDGE_TS:-0}
 LAST_NUDGE_COUNT=${LAST_NUDGE_COUNT:-""}
 NUDGE_COOLDOWN_SEC=${NUDGE_COOLDOWN_SEC:-60}
@@ -139,7 +147,7 @@ should_throttle_nudge() {
     if [ "${LAST_NUDGE_COUNT:-}" = "$unread_count" ] && [ "${LAST_NUDGE_TS:-0}" -gt 0 ]; then
         local age=$((now - LAST_NUDGE_TS))
         if [ "$age" -lt "${cooldown_sec}" ]; then
-            echo "[$(date)] [SKIP] Throttling nudge for $AGENT_ID: inbox${unread_count} (${age}s < ${cooldown_sec}s, cli=$effective_cli)" >&2
+            echo "[$(date)] [SKIP] Throttling nudge for $AGENT_ID (${age}s < ${cooldown_sec}s, cli=$effective_cli, unread=${unread_count})" >&2
             return 0
         fi
     fi
@@ -200,6 +208,10 @@ normalize_special_command() {
             fi
             ;;
     esac
+}
+
+build_explicit_nudge() {
+    echo "queue/inbox/${AGENT_ID}.yaml を読んで未読メッセージを処理せよ"
 }
 
 enqueue_recovery_task_assigned() {
@@ -410,9 +422,9 @@ send_cli_command() {
     # /clear needs extra wait time before follow-up
     if [[ "$actual_cmd" == "/clear" ]]; then
         sleep 3
-        # Post-clear nudge: send inbox1 to wake new session
+        # Post-clear nudge: explicit inbox processing instruction
         echo "[$(date)] [SEND-KEYS] Post-clear nudge for $AGENT_ID" >&2
-        timeout 5 tmux send-keys -t "$PANE_TARGET" "inbox1" 2>/dev/null
+        timeout 5 tmux send-keys -t "$PANE_TARGET" "$(build_explicit_nudge)" 2>/dev/null
         sleep 0.3
         timeout 5 tmux send-keys -t "$PANE_TARGET" Enter 2>/dev/null
     else
@@ -450,7 +462,9 @@ agent_is_busy() {
     fi
 
     # Minimal fallbacks (no spinner dependency).
-    if echo "$pane_content" | grep -qiE '(Working|Thinking|Planning|Sending|task is in progress|Compacting conversation|thought for|思考中|考え中|計画中|送信中|処理中|実行中)'; then
+    # Keep this strict: generic words like "実行中" may appear in normal conversation text
+    # and cause false "busy" detection forever.
+    if echo "$pane_content" | grep -qiE '(Working \(|Thinking \(|Planning \(|Sending \(|task is in progress|Compacting conversation|thought for)'; then
         return 0  # busy
     fi
     return 1  # idle
@@ -471,7 +485,8 @@ pane_is_active() {
 #   3. tmux send-keys (短いnudgeのみ、timeout 5s)
 send_wakeup() {
     local unread_count="$1"
-    local nudge="inbox${unread_count}"
+    local nudge
+    nudge="$(build_explicit_nudge)"
 
     if [ "${FINAL_ESCALATION_ONLY:-0}" = "1" ]; then
         echo "[$(date)] [SKIP] FINAL_ESCALATION_ONLY=1, suppressing normal nudge for $AGENT_ID" >&2
@@ -497,8 +512,8 @@ send_wakeup() {
     # Shogun: if the pane is focused, never inject keys (it can clobber the Lord's input).
     # Instead, show a tmux message. If not focused, we can safely send the normal nudge.
     if [ "$AGENT_ID" = "shogun" ] && pane_is_active; then
-        echo "[$(date)] [DISPLAY] shogun pane is active — showing nudge: inbox${unread_count}" >&2
-        timeout 2 tmux display-message -t "$PANE_TARGET" -d 5000 "inbox${unread_count}" 2>/dev/null || true
+        echo "[$(date)] [DISPLAY] shogun pane is active — showing explicit inbox nudge" >&2
+        timeout 2 tmux display-message -t "$PANE_TARGET" -d 5000 "$nudge" 2>/dev/null || true
         return 0
     fi
 
@@ -520,7 +535,8 @@ send_wakeup() {
 # Addresses the "echo last tool call" cursor position bug and stale input.
 send_wakeup_with_escape() {
     local unread_count="$1"
-    local nudge="inbox${unread_count}"
+    local nudge
+    nudge="$(build_explicit_nudge)"
     local effective_cli
     effective_cli=$(get_effective_cli_type)
     local c_ctrl_state="skipped"
