@@ -28,6 +28,7 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
     set -euo pipefail
 
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
     AGENT_ID="$1"
     PANE_TARGET="$2"
     CLI_TYPE="${3:-claude}"  # CLI種別（claude/codex/copilot）。未指定→claude（後方互換）
@@ -37,6 +38,11 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
 
     if [ -z "$AGENT_ID" ] || [ -z "$PANE_TARGET" ]; then
         echo "Usage: inbox_watcher.sh <agent_id> <pane_target> [cli_type]" >&2
+        exit 1
+    fi
+
+    if [ ! -x "$PYTHON_BIN" ]; then
+        echo "[inbox_watcher] ERROR: system python not found: $PYTHON_BIN" >&2
         exit 1
     fi
 
@@ -54,6 +60,8 @@ if [ "${__INBOX_WATCHER_TESTING__:-}" != "1" ]; then
         exit 1
     fi
 fi
+
+PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 
 # ─── Escalation state ───
 # Time-based escalation: track how long unread messages have been waiting
@@ -279,7 +287,7 @@ no_idle_full_read() {
 
 # summary-first: unread_count fast-path before full read
 get_unread_count_fast() {
-    INBOX_PATH="$INBOX" python3 - << 'PY'
+    INBOX_PATH="$INBOX" "$PYTHON_BIN" - << 'PY'
 import json
 import os
 import yaml
@@ -302,7 +310,7 @@ PY
 get_unread_info() {
     (
         flock -x 200
-        INBOX_PATH="$INBOX" python3 - << 'PY'
+        INBOX_PATH="$INBOX" "$PYTHON_BIN" - << 'PY'
 import json
 import os
 import yaml
@@ -661,7 +669,7 @@ process_unread() {
     local fast_info
     fast_info=$(get_unread_count_fast)
     local fast_count
-    fast_count=$(echo "$fast_info" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
+    fast_count=$(echo "$fast_info" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
 
     if no_idle_full_read "$trigger" && [ "$fast_count" -eq 0 ] 2>/dev/null; then
         # no_idle_full_read guard: unread=0 and timeout path → no full inbox read
@@ -690,7 +698,7 @@ process_unread() {
 
     # Handle special CLI commands first (/clear, /model)
     local specials
-    specials=$(echo "$info" | python3 -c "
+    specials=$(echo "$info" | "$PYTHON_BIN" -c "
 import sys, json
 data = json.load(sys.stdin)
 for s in data.get('specials', []):
@@ -725,7 +733,7 @@ for s in data.get('specials', []):
 
     # Send wake-up nudge for normal messages (with escalation)
     local normal_count
-    normal_count=$(echo "$info" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
+    normal_count=$(echo "$info" | "$PYTHON_BIN" -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null)
 
     # Check if unread messages include task_assigned (for context reset)
     local has_task_assigned
